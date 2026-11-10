@@ -11,6 +11,23 @@ import { i18n } from "../utils/i18n.js";
 import "./AttachmentTile.js";
 import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 
+export interface SlashCommandItem {
+	id: string;
+	title: string;
+	description?: string;
+	hint?: string;
+	value: string;
+}
+
+export type SlashCommandProvider = (query: string) => Promise<SlashCommandItem[]>;
+
+interface SlashMenu {
+	start: number;
+	end: number;
+	items: SlashCommandItem[];
+	index: number;
+}
+
 @customElement("message-editor")
 export class MessageEditor extends LitElement {
 	private _value = "";
@@ -39,6 +56,8 @@ export class MessageEditor extends LitElement {
 	@property() onModelSelect?: () => void;
 	@property() onThinkingChange?: (level: "off" | "minimal" | "low" | "medium" | "high") => void;
 	@property() onFilesChange?: (files: Attachment[]) => void;
+	@property({ attribute: false }) slashCommandProvider?: SlashCommandProvider;
+	@property({ attribute: false }) historyProvider?: () => string | undefined;
 	@property() attachments: Attachment[] = [];
 	@property() maxFiles = 10;
 	@property() maxFileSize = 20 * 1024 * 1024; // 20MB
@@ -47,6 +66,8 @@ export class MessageEditor extends LitElement {
 
 	@state() processingFiles = false;
 	@state() isDragging = false;
+	@state() private slashMenu?: SlashMenu;
+	private slashRequest = 0;
 	private fileInputRef = createRef<HTMLInputElement>();
 
 	protected override createRenderRoot(): HTMLElement | DocumentFragment {
@@ -57,10 +78,75 @@ export class MessageEditor extends LitElement {
 		const textarea = e.target as HTMLTextAreaElement;
 		this.value = textarea.value;
 		this.onInput?.(this.value);
+		this.updateSlashMenu(textarea.selectionStart);
 	};
 
+	private async updateSlashMenu(caret: number) {
+		const request = ++this.slashRequest;
+		const match = /(?:^|\s)\/(\S*)$/.exec(this.value.slice(0, caret));
+		if (!this.slashCommandProvider || !match) {
+			this.slashMenu = undefined;
+			return;
+		}
+		let items: SlashCommandItem[] = [];
+		try {
+			items = await this.slashCommandProvider(match[1]);
+		} catch (error) {
+			console.error("Slash command provider failed:", error);
+		}
+		if (request !== this.slashRequest) return;
+		this.slashMenu =
+			items.length > 0 ? { start: caret - match[1].length - 1, end: caret, items, index: 0 } : undefined;
+	}
+
+	private closeSlashMenu() {
+		this.slashRequest++;
+		this.slashMenu = undefined;
+	}
+
+	private insertSlashItem(item: SlashCommandItem) {
+		if (!this.slashMenu) return;
+		const { start, end } = this.slashMenu;
+		const inserted = `${item.value} `;
+		this.replaceValue(`${this.value.slice(0, start)}${inserted}${this.value.slice(end)}`, start + inserted.length);
+		this.closeSlashMenu();
+	}
+
+	private replaceValue(value: string, caret: number) {
+		this.value = value;
+		this.onInput?.(value);
+		this.updateComplete.then(() => {
+			const textarea = this.textareaRef.value;
+			textarea?.focus();
+			textarea?.setSelectionRange(caret, caret);
+		});
+	}
+
+	private handleSlashMenuKey(e: KeyboardEvent, menu: SlashMenu): boolean {
+		const count = menu.items.length;
+		if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			const step = e.key === "ArrowDown" ? 1 : -1;
+			this.slashMenu = { ...menu, index: (menu.index + step + count) % count };
+		} else if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+			this.insertSlashItem(menu.items[menu.index]);
+		} else if (e.key === "Escape") {
+			this.closeSlashMenu();
+		} else {
+			return false;
+		}
+		e.preventDefault();
+		return true;
+	}
+
 	private handleKeyDown = (e: KeyboardEvent) => {
-		if (e.key === "Enter" && !e.shiftKey) {
+		if (this.slashMenu && this.handleSlashMenuKey(e, this.slashMenu)) return;
+		if (e.key === "ArrowUp" && !this.value && this.historyProvider) {
+			const recalled = this.historyProvider();
+			if (recalled) {
+				e.preventDefault();
+				this.replaceValue(recalled, recalled.length);
+			}
+		} else if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			if (!this.isStreaming && !this.processingFiles && (this.value.trim() || this.attachments.length > 0)) {
 				this.handleSend();
@@ -122,6 +208,7 @@ export class MessageEditor extends LitElement {
 	};
 
 	private handleSend = () => {
+		this.closeSlashMenu();
 		this.onSend?.(this.value, this.attachments);
 	};
 
@@ -232,6 +319,38 @@ export class MessageEditor extends LitElement {
 		}
 	}
 
+	override updated() {
+		this.querySelector("[data-slash-selected]")?.scrollIntoView({ block: "nearest" });
+	}
+
+	private renderSlashMenu(menu: SlashMenu) {
+		return html`
+			<div class="absolute bottom-full left-0 right-0 mb-1 z-20 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-md">
+				${menu.items.map(
+					(item, index) => html`
+						<div
+							?data-slash-selected=${index === menu.index}
+							class="px-3 py-2 cursor-pointer ${index === menu.index ? "bg-accent" : ""}"
+							@mousedown=${(e: MouseEvent) => {
+								e.preventDefault();
+								this.insertSlashItem(item);
+							}}
+							@mouseenter=${() => {
+								this.slashMenu = { ...menu, index };
+							}}
+						>
+							<div class="flex items-center justify-between gap-2">
+								<span class="text-sm font-medium truncate">${item.title}</span>
+								${item.hint ? html`<span class="text-xs text-muted-foreground shrink-0">${item.hint}</span>` : ""}
+							</div>
+							${item.description ? html`<div class="text-xs text-muted-foreground truncate">${item.description}</div>` : ""}
+						</div>
+					`,
+				)}
+			</div>
+		`;
+	}
+
 	override render() {
 		// Check if current model supports thinking/reasoning
 		const model = this.currentModel;
@@ -254,6 +373,8 @@ export class MessageEditor extends LitElement {
 				`
 						: ""
 				}
+
+				${this.slashMenu ? this.renderSlashMenu(this.slashMenu) : ""}
 
 				<!-- Attachments -->
 				${
@@ -282,6 +403,7 @@ export class MessageEditor extends LitElement {
 					.value=${this.value}
 					@input=${this.handleTextareaInput}
 					@keydown=${this.handleKeyDown}
+					@blur=${() => this.closeSlashMenu()}
 					@paste=${this.handlePaste}
 					${ref(this.textareaRef)}
 				></textarea>

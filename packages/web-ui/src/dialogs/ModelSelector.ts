@@ -3,6 +3,7 @@ import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { DialogHeader } from "@mariozechner/mini-lit/dist/Dialog.js";
 import { DialogBase } from "@mariozechner/mini-lit/dist/DialogBase.js";
+import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { getModels, getProviders, type Model, modelsAreEqual } from "@mariozechner/pi-ai";
 import { html, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
@@ -14,6 +15,19 @@ import type { AutoDiscoveryProviderType } from "../storage/stores/custom-provide
 import { formatModelCost } from "../utils/format.js";
 import { i18n } from "../utils/i18n.js";
 import { discoverModels } from "../utils/model-discovery.js";
+
+export interface ThinkingControl {
+	level: ThinkingLevel;
+	onChange: (level: ThinkingLevel) => void;
+}
+
+const THINKING_LEVELS: Array<{ level: ThinkingLevel; label: Parameters<typeof i18n>[0] }> = [
+	{ level: "off", label: "Off" },
+	{ level: "minimal", label: "Minimal" },
+	{ level: "low", label: "Low" },
+	{ level: "medium", label: "Medium" },
+	{ level: "high", label: "High" },
+];
 
 /**
  * Score a query against a text using subsequence matching.
@@ -56,6 +70,7 @@ export class ModelSelector extends DialogBase {
 	@state() selectedIndex = 0;
 	@state() private navigationMode: "mouse" | "keyboard" = "mouse";
 	@state() private customProviderModels: Model<any>[] = [];
+	@state() private thinking?: ThinkingControl;
 
 	private onSelectCallback?: (model: Model<any>) => void;
 	private allowedProviders?: Set<string>;
@@ -69,10 +84,12 @@ export class ModelSelector extends DialogBase {
 		currentModel: Model<any> | null,
 		onSelect: (model: Model<any>) => void,
 		allowedProviders?: string[],
+		thinking?: ThinkingControl,
 	) {
 		const selector = new ModelSelector();
 		selector.currentModel = currentModel;
 		selector.onSelectCallback = onSelect;
+		selector.thinking = thinking;
 		if (allowedProviders) {
 			selector.allowedProviders = new Set(allowedProviders);
 		}
@@ -274,6 +291,28 @@ export class ModelSelector extends DialogBase {
 		});
 	}
 
+	private selectThinkingLevel(thinking: ThinkingControl, level: ThinkingLevel) {
+		this.thinking = { ...thinking, level };
+		thinking.onChange(level);
+	}
+
+	private renderThinkingLevels(thinking: ThinkingControl): TemplateResult {
+		return html`
+			<div class="flex items-center gap-1 flex-wrap">
+				<span class="text-muted-foreground mr-1" title=${i18n("Thinking")}>${icon(Brain, "sm")}</span>
+				${THINKING_LEVELS.map(({ level, label }) =>
+					Button({
+						variant: thinking.level === level ? "default" : "ghost",
+						size: "sm",
+						onClick: () => this.selectThinkingLevel(thinking, level),
+						className: "h-7 px-2 text-xs",
+						children: i18n(label),
+					}),
+				)}
+			</div>
+		`;
+	}
+
 	protected override renderContent(): TemplateResult {
 		const filteredModels = this.getFilteredModels();
 
@@ -322,6 +361,7 @@ export class ModelSelector extends DialogBase {
 						children: html`<span class="inline-flex items-center gap-1">${icon(ImageIcon, "sm")} ${i18n("Vision")}</span>`,
 					})}
 				</div>
+				${this.thinking && this.currentModel?.reasoning ? this.renderThinkingLevels(this.thinking) : ""}
 			</div>
 
 			<!-- Scrollable model list -->

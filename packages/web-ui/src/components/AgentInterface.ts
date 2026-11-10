@@ -2,7 +2,7 @@ import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/
 import { html, LitElement } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import { ModelSelector } from "../dialogs/ModelSelector.js";
-import type { MessageEditor } from "./MessageEditor.js";
+import type { MessageEditor, SlashCommandProvider } from "./MessageEditor.js";
 import "./MessageEditor.js";
 import "./MessageList.js";
 import "./Messages.js"; // Import for side effects to register the custom elements
@@ -34,6 +34,8 @@ export class AgentInterface extends LitElement {
 	@property({ attribute: false }) onCostClick?: () => void;
 	// Optional callback to override model selector behavior
 	@property({ attribute: false }) onModelSelect?: () => void;
+	@property({ attribute: false }) slashCommandProvider?: SlashCommandProvider;
+	@property({ attribute: false }) historyProvider?: () => string | undefined;
 
 	// References
 	@query("message-editor") private _messageEditor!: MessageEditor;
@@ -368,6 +370,8 @@ export class AgentInterface extends LitElement {
 							.showAttachmentButton=${this.enableAttachments}
 							.showModelSelector=${this.enableModelSelector}
 							.showThinkingSelector=${this.enableThinkingSelector}
+							.slashCommandProvider=${this.slashCommandProvider}
+							.historyProvider=${this.historyProvider}
 							.onSend=${(input: string, attachments: Attachment[]) => {
 								this.sendMessage(input, attachments);
 							}}
