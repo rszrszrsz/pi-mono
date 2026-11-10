@@ -265,6 +265,8 @@ export interface OpenAICompletionsCompat {
 	supportsUsageInStreaming?: boolean;
 	/** Which field to use for max tokens. Default: auto-detected from URL. */
 	maxTokensField?: "max_completion_tokens" | "max_tokens";
+	/** Whether to leave the max tokens field out so the server applies its own limit. Default: false. */
+	omitMaxTokens?: boolean;
 	/** Whether tool results require the `name` field. Default: auto-detected from URL. */
 	requiresToolResultName?: boolean;
 	/** Whether a user message after tool results requires an assistant message in between. Default: auto-detected from URL. */

@@ -233,4 +233,23 @@ describe("openai-completions tool_choice", () => {
 		expect(response.stopReason).toBe("error");
 		expect(response.errorMessage).toBe("Provider finish_reason: network_error");
 	});
+
+	it("leaves max tokens out when compat sets omitMaxTokens", async () => {
+		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini")!;
+		const model = {
+			...baseModel,
+			api: "openai-completions",
+			compat: { maxTokensField: "max_tokens", omitMaxTokens: true },
+		} as const;
+
+		await streamSimple(
+			model,
+			{ messages: [{ role: "user", content: "hi", timestamp: Date.now() }] },
+			{ apiKey: "test", maxTokens: 8192 },
+		).result();
+
+		const params = mockState.lastParams as Record<string, unknown>;
+		expect(params).not.toHaveProperty("max_tokens");
+		expect(params).not.toHaveProperty("max_completion_tokens");
+	});
 });

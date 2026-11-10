@@ -379,7 +379,7 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 		params.store = false;
 	}
 
-	if (options?.maxTokens) {
+	if (options?.maxTokens && !compat.omitMaxTokens) {
 		if (compat.maxTokensField === "max_tokens") {
 			(params as any).max_tokens = options.maxTokens;
 		} else {
@@ -813,6 +813,7 @@ function detectCompat(model: Model<"openai-completions">): Required<OpenAIComple
 		reasoningEffortMap,
 		supportsUsageInStreaming: true,
 		maxTokensField: useMaxTokens ? "max_tokens" : "max_completion_tokens",
+		omitMaxTokens: false,
 		requiresToolResultName: false,
 		requiresAssistantAfterToolResult: false,
 		requiresThinkingAsText: false,
@@ -838,6 +839,7 @@ function getCompat(model: Model<"openai-completions">): Required<OpenAICompletio
 		reasoningEffortMap: model.compat.reasoningEffortMap ?? detected.reasoningEffortMap,
 		supportsUsageInStreaming: model.compat.supportsUsageInStreaming ?? detected.supportsUsageInStreaming,
 		maxTokensField: model.compat.maxTokensField ?? detected.maxTokensField,
+		omitMaxTokens: model.compat.omitMaxTokens ?? detected.omitMaxTokens,
 		requiresToolResultName: model.compat.requiresToolResultName ?? detected.requiresToolResultName,
 		requiresAssistantAfterToolResult:
 			model.compat.requiresAssistantAfterToolResult ?? detected.requiresAssistantAfterToolResult,
