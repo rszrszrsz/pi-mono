@@ -75,3 +75,25 @@ export function modelsAreEqual<TApi extends Api>(
 	if (!a || !b) return false;
 	return a.id === b.id && a.provider === b.provider;
 }
+
+export function registerModels(provider: string, models: Model<Api>[]): void {
+	const providerModels = new Map<string, Model<Api>>();
+	for (const model of models) providerModels.set(model.id, model);
+	modelRegistry.set(provider, providerModels);
+}
+
+export function resetProviderModels(provider: string): void {
+	const generated = (MODELS as Record<string, Record<string, Model<Api>>>)[provider];
+	if (!generated) {
+		modelRegistry.delete(provider);
+		return;
+	}
+	const providerModels = new Map<string, Model<Api>>();
+	for (const [id, model] of Object.entries(generated)) providerModels.set(id, model);
+	modelRegistry.set(provider, providerModels);
+}
+
+export function getGeneratedModels(provider: string): Model<Api>[] {
+	const generated = (MODELS as Record<string, Record<string, Model<Api>>>)[provider];
+	return generated ? Object.values(generated) : [];
+}
